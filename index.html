@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卓球部 出席・業務管理システム</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            touch-action: manipulation;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 通信中スピナー / トースト通知 -->
+    <div id="loading-overlay" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center hidden">
+        <div class="bg-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3">
+            <i class="fa-solid fa-circle-notch fa-spin text-emerald-600 text-xl"></i>
+            <span class="text-sm font-bold text-slate-700">データを同期中...</span>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 pointer-events-none">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-message" class="text-sm font-bold"></span>
+    </div>
+
+    <!-- ヘッダー（固定） -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur shadow-sm border-b border-slate-200 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
+            
+            <div class="flex items-center justify-between w-full md:w-auto gap-4">
+                <div class="flex items-center gap-2 cursor-pointer" onclick="switchPage('main')">
+                    <div class="bg-emerald-600 text-white p-2 rounded-xl shadow-md">
+                        <i class="fa-solid fa-table-tennis-paddle-ball text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-slate-900 leading-tight">卓球部 出席＆業務管理</h1>
+                        <p id="current-date-str" class="text-xs text-slate-500 font-medium"></p>
+                    </div>
+                </div>
+                <!-- スマホ用操作ボタン -->
+                <div class="flex items-center gap-1 md:hidden">
+                    <button onclick="switchPage('main')" id="nav-btn-main-sm" class="bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-xl font-bold text-xs">メイン</button>
+                    <button onclick="switchPage('calendar')" id="nav-btn-cal-sm" class="bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-xl font-bold text-xs">カレンダー</button>
+                    <button onclick="openHistoryModal()" class="bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-xl font-bold text-xs">履歴</button>
+                </div>
+            </div>
+
+            <!-- カウンター表示 -->
+            <div id="header-counters" class="flex flex-wrap items-center justify-center gap-2 bg-slate-100/80 p-2 rounded-2xl border border-slate-200/60">
+                <!-- JS生成 -->
+            </div>
+
+            <!-- PC用ナビゲーション＆アクションボタン -->
+            <div class="hidden md:flex items-center gap-2">
+                <div class="bg-slate-100 p-1 rounded-xl flex gap-1 mr-2 text-xs font-bold">
+                    <button id="nav-btn-main" onclick="switchPage('main')" class="px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-2xs">メイン管理</button>
+                    <button id="nav-btn-cal" onclick="switchPage('calendar')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">📅 全面カレンダー</button>
+                </div>
+                <button onclick="fetchFromCloud()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl font-medium text-xs transition flex items-center gap-1.5 shadow-2xs">
+                    <i class="fa-solid fa-rotate text-slate-500"></i> 最新読込
+                </button>
+                <button onclick="openManageModal()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl font-medium text-xs transition flex items-center gap-1.5 shadow-2xs">
+                    <i class="fa-solid fa-gear text-slate-500"></i> 部員管理
+                </button>
+                <button onclick="openHistoryModal()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl font-medium text-xs transition flex items-center gap-1.5 shadow-2xs">
+                    <i class="fa-solid fa-table-cells text-slate-500"></i> 履歴表
+                </button>
+                <button onclick="saveTodayAttendance()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-floppy-disk"></i> クラウド保存
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- 1. メイン管理画面 -->
+    <main id="page-main" class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+        
+        <!-- 記録日選択 ＆ 行事メモ -->
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-4 rounded-2xl shadow-xs border border-slate-200 gap-3">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                <div class="flex items-center gap-2 shrink-0">
+                    <label for="attendance-date" class="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-regular fa-calendar-days text-emerald-600"></i> 記録日:
+                    </label>
+                    <input type="date" id="attendance-date" onchange="onDateChange()" class="bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl px-3 py-1.5 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <!-- 本日の行事メモ -->
+                <div class="flex items-center gap-2 w-full sm:w-auto flex-1">
+                    <span class="text-xs font-bold text-slate-500 shrink-0">本日の行事:</span>
+                    <input type="text" id="day-title" oninput="onDayTitleInput()" placeholder="例: 通常練習、新宿区新人戦 など" class="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+            </div>
+
+            <!-- アクションボタン（リセット・保存） -->
+            <div class="flex items-center gap-2 w-full lg:w-auto justify-end shrink-0">
+                <button onclick="resetTodayAttendance()" class="text-xs text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-xl font-medium transition border border-slate-200">
+                    <i class="fa-solid fa-rotate-right mr-1"></i> リセット
+                </button>
+                <button onclick="saveTodayAttendance()" class="md:hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1 shadow-xs">
+                    <i class="fa-solid fa-floppy-disk"></i> 保存
+                </button>
+            </div>
+        </div>
+
+        <!-- 遅刻者・準備・片付けの記入エリア -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            
+            <!-- 1. 遅刻者・備考記入 -->
+            <div class="bg-white p-4 rounded-2xl shadow-xs border border-amber-200 bg-amber-50/20 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xs font-bold text-amber-900 flex items-center gap-1.5 mb-1">
+                        <i class="fa-solid fa-clock text-amber-600"></i> 遅刻・備考メモ
+                    </h2>
+                    <p class="text-[11px] text-slate-500 mb-2">遅刻者や連絡事項を記入</p>
+                    <textarea id="late-notes" oninput="onNotesInput()" rows="4" placeholder="例: 山田 太郎 (15分遅刻)" class="w-full bg-white border border-amber-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-inner"></textarea>
+                </div>
+            </div>
+
+            <!-- 2. 部室準備（中一から★大切） -->
+            <div class="bg-white p-4 rounded-2xl shadow-xs border border-rose-200 bg-rose-50/20">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-key text-rose-600"></i> 部室準備
+                    </h2>
+                    <span class="text-[9px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">中一★大切</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">担当者を選択</p>
+                <div id="room-prep-selector" class="max-h-36 overflow-y-auto grid grid-cols-1 gap-1 p-1 bg-white rounded-xl border border-rose-100 text-xs"></div>
+            </div>
+
+            <!-- 3. フェンス準備（中二から） -->
+            <div class="bg-white p-4 rounded-2xl shadow-xs border border-blue-200 bg-blue-50/20">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-border-all text-blue-600"></i> フェンス準備
+                    </h2>
+                    <span class="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">中二から</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">担当者を選択</p>
+                <div id="fence-prep-selector" class="max-h-36 overflow-y-auto grid grid-cols-1 gap-1 p-1 bg-white rounded-xl border border-blue-100 text-xs"></div>
+            </div>
+
+            <!-- 4. 部室片付け（中一から） -->
+            <div class="bg-white p-4 rounded-2xl shadow-xs border border-purple-200 bg-purple-50/20">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-broom text-purple-600"></i> 部室片付け
+                    </h2>
+                    <span class="text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">中一から</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">担当者を選択</p>
+                <div id="room-cleanup-selector" class="max-h-36 overflow-y-auto grid grid-cols-1 gap-1 p-1 bg-white rounded-xl border border-purple-100 text-xs"></div>
+            </div>
+
+            <!-- 5. フェンス片付け（中二から） -->
+            <div class="bg-white p-4 rounded-2xl shadow-xs border border-teal-200 bg-teal-50/20">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-xs font-bold text-teal-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-boxes-packing text-teal-600"></i> フェンス片付け
+                    </h2>
+                    <span class="text-[9px] font-bold bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded">中二から</span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">担当者を選択</p>
+                <div id="fence-cleanup-selector" class="max-h-36 overflow-y-auto grid grid-cols-1 gap-1 p-1 bg-white rounded-xl border border-teal-100 text-xs"></div>
+            </div>
+
+        </div>
+
+        <!-- ランク切り替えタブバー -->
+        <div id="rank-tabs-bar" class="flex flex-wrap gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl border border-slate-200/80">
+            <!-- JS生成 -->
+        </div>
+
+        <!-- 各ランクごとの部員ボタンエリア -->
+        <div id="ranks-container" class="space-y-6">
+            <!-- JS生成 -->
+        </div>
+
+    </main>
+
+    <!-- 2. 全面カレンダー画面（別ビュー） -->
+    <main id="page-calendar" class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full hidden space-y-6">
+        
+        <!-- カレンダーヘッダー・月切り替え -->
+        <div class="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <button onclick="changeMonth(-1)" class="w-10 h-10 rounded-xl border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <h2 id="calendar-month-year" class="text-xl font-extrabold text-slate-900 tracking-tight"></h2>
+                <button onclick="changeMonth(1)" class="w-10 h-10 rounded-xl border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="goToCurrentMonth()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition">
+                    今月を表示
+                </button>
+            </div>
+        </div>
+
+        <!-- カレンダー本体グリッド -->
+        <div class="bg-white rounded-3xl shadow-xs border border-slate-200 p-3 sm:p-5 overflow-hidden">
+            <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs mb-2 py-2 border-b border-slate-100">
+                <div class="text-rose-500">日</div>
+                <div class="text-slate-600">月</div>
+                <div class="text-slate-600">火</div>
+                <div class="text-slate-600">水</div>
+                <div class="text-slate-600">木</div>
+                <div class="text-slate-600">金</div>
+                <div class="text-blue-500">土</div>
+            </div>
+
+            <div id="calendar-days-grid" class="grid grid-cols-7 gap-1.5 sm:gap-2">
+                <!-- JS動的生成 -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- カレンダー詳細編集ポップアップモーダル -->
+    <div id="cal-detail-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 id="cal-modal-date" class="font-extrabold text-base text-slate-900"></h3>
+                <button onclick="closeCalModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">本日の行事・メモ:</label>
+                    <input type="text" id="cal-modal-title" placeholder="例: 通常練習、大会、部活休み" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div id="cal-modal-status-info" class="p-3 bg-slate-50 rounded-xl text-xs space-y-1 text-slate-600 border border-slate-200">
+                    <!-- 記録状況サマリー -->
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-2 border-t">
+                <button onclick="deleteCalModalRecord()" class="text-xs text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-xl font-bold transition">
+                    記録を削除（部活なし）
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="saveCalModalAndOpen()" class="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl">
+                        この日の記録を開く
+                    </button>
+                    <button onclick="saveCalModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl">
+                        行事メモを保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 履歴＆業務記録モーダル -->
+    <div id="history-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-6">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+            
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-table-cells text-emerald-600"></i> 活動記録・履歴データ
+                    </h2>
+                    <p class="text-xs text-slate-500">「出席記録」「早退・帰宅時間」「準備・片付け担当記録」を切り替えて閲覧・出力できます。</p>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <div class="bg-slate-200/80 p-1 rounded-xl flex text-xs font-bold gap-1">
+                        <button id="tab-btn-attendance" onclick="switchHistoryTab('attendance')" class="px-2.5 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-2xs">出席マトリックス</button>
+                        <button id="tab-btn-earlyleave" onclick="switchHistoryTab('earlyleave')" class="px-2.5 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-900">早退・帰宅記録</button>
+                        <button id="tab-btn-task" onclick="switchHistoryTab('task')" class="px-2.5 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-900">準備・片付け 記録表</button>
+                    </div>
+                    <button onclick="closeHistoryModal()" class="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-slate-300 rounded-full text-slate-700 transition ml-2">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-4 sm:p-6 overflow-auto flex-1 bg-slate-50/50">
+                <div id="tab-content-attendance" class="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-x-auto">
+                    <table id="history-matrix-table" class="w-full text-left border-collapse text-xs sm:text-sm"></table>
+                </div>
+
+                <div id="tab-content-earlyleave" class="hidden space-y-4">
+                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                        <i class="fa-solid fa-clock text-amber-600 text-sm"></i>
+                        <span>部員が「早退」を押した時刻および帰宅時間の記録一覧です。</span>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-x-auto">
+                        <table id="earlyleave-matrix-table" class="w-full text-left border-collapse text-xs sm:text-sm"></table>
+                    </div>
+                </div>
+
+                <div id="tab-content-task" class="hidden space-y-4">
+                    <div class="bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs text-blue-800 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-blue-600 text-sm"></i>
+                        <span><b>部室・フェンスの準備および片付け</b>の担当履歴と、行事・遅刻メモの一覧表です。</span>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-x-auto">
+                        <table id="task-matrix-table" class="w-full text-left border-collapse text-xs sm:text-sm"></table>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="p-4 sm:p-5 border-t border-slate-200 bg-white flex justify-between items-center">
+                <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition flex items-center gap-2 shadow-xs">
+                    <i class="fa-solid fa-download"></i> CSVエクスポート
+                </button>
+                <button onclick="closeHistoryModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-xl font-bold text-sm transition">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 部員・ランク管理モーダル -->
+    <div id="manage-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-6">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+            <div class="p-4 sm:p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-gear text-blue-600"></i> 部員・ランク設定
+                </h2>
+                <button onclick="closeManageModal()" class="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-slate-300 rounded-full text-slate-700 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6 bg-slate-50/50">
+                <!-- 新規ランク作成 -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <h3 class="text-xs font-bold text-slate-700">新しいランクを追加</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-rank-name" placeholder="例: S, 中二" class="bg-slate-50 border border-slate-300 text-xs rounded-xl px-3 py-2 flex-1 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <button onclick="addNewRank()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition">ランク追加</button>
+                    </div>
+                </div>
+
+                <!-- 新規部員追加 -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <h3 class="text-xs font-bold text-slate-700">新規部員の追加</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input type="text" id="new-member-name" placeholder="部員氏名" class="bg-slate-50 border border-slate-300 text-xs rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <select id="new-member-rank" class="bg-slate-50 border border-slate-300 text-xs rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"></select>
+                        <button onclick="addNewMember()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition">部員追加</button>
+                    </div>
+                </div>
+
+                <!-- 部員一覧管理 -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xs font-bold text-slate-700">部員一覧・所属ランク編集</h3>
+                        <button onclick="resetToDefaultMembers()" class="text-[11px] text-slate-400 hover:text-rose-600 underline">初期データに戻す</button>
+                    </div>
+                    <div class="max-h-60 overflow-y-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead><tr class="bg-slate-100 border-b"><th class="p-2">氏名</th><th class="p-2">ランク</th><th class="p-2 text-right">操作</th></tr></thead>
+                            <tbody id="manage-member-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-200 bg-white flex justify-end">
+                <button onclick="closeManageModal()" class="bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold">完了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript ロジック -->
+    <script>
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwUItnzRAsZEJ-9X6pUyuHIx95s5ShyW1s96KnVqiB9AsRdx7rFb8kOq2xWAio1wqrDsg/exec";
+
+        const DEFAULT_MEMBERS = {
+            "A": ["陳 威宇", "佐治 直一郎", "森 優太", "楊 チェン哲", "吉田 旭希", "松溪 遼人", "並木 理人"],
+            "B": ["御手洗 克哉", "福山 智志", "秋生 晴矢", "清水 謙伍", "山田 健人", "四方田 凛太郎", "土屋 開", "分銅 友輝", "鈴木 智大"],
+            "C": ["渡辺 将史", "三上 優人", "竹内 陽心郎", "佐々木 郁人", "吉田 聡一郎", "川上 湊二郎", "武地 耕平", "渡邉 永都", "永山 暖馬", "竹中 敦紀", "綿貫 龍", "魏 銘白"],
+            "D": ["江山 広泰", "古澤 琳之介", "高田 凱洋", "高橋 翔", "内川 悠", "水上 琉成", "向笠 傑", "李 成蹊"],
+            "E": ["木村 暉", "柏木 佑斗", "高田 龍", "篠田 慶一", "伊波 慶", "陳 麒翔", "工藤 圭恭"],
+            "中一": ["荒井 佑真", "猪熊 相太", "小川 賢人", "胡 浩辰", "荒巻 慧斗", "有本 治之輔", "王 佑彦", "加藤 伊織", "苅谷 朔太朗", "石田 博規", "上阪 茅大", "大久保 智哉", "尾崎 陸", "星 凛太郎", "柳林 玄信", "小椋 舜夫", "楠原 悠斗", "小林 慶", "佐竹 遼斗", "佐藤 榮政", "珠久 翼", "邵 冠哲", "丁子 博", "野村 直矢", "橋本 絢仁", "穂積 遙希", "張 悦揚", "戸清 羽琉", "三神 遼生", "江田 梁平", "榊原 碧真", "高橋 庵", "高山 隼", "齋藤 匠", "西平 巧", "白 亦軒"]
+        };
+
+        const CHU_NI_MEMBERS = ["篠田 慶一", "陳 麒翔", "渡邉 永都", "綿貫 龍", "柏木 佑斗", "古澤 琳之介", "伊波 慶", "木村 暉", "高田 龍", "内川 悠", "魏 銘白", "永山 暖馬", "鈴木 智大", "高田 凱洋", "水上 琉成"];
+
+        let rankOrder = JSON.parse(localStorage.getItem('tt_rank_order')) || ["A", "B", "C", "D", "E", "中一"];
+        let membersData = JSON.parse(localStorage.getItem('tt_members_data')) || JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
+        let attendanceRecords = JSON.parse(localStorage.getItem('tt_attendance_records')) || {};
+
+        let activeRankTab = 'ALL'; // 表示中のランク ('ALL', 'A', 'B', etc.)
+
+        function getTodayString() {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        }
+
+        function getCurrentTimeString() {
+            const now = new Date();
+            return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function formatDateWithDay(dateStr) {
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+            const date = new Date(y, m - 1, d);
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+            return `${m}/${d} (${days[date.getDay()]})`;
+        }
+
+        let currentDate = getTodayString();
+        let calCurrentYear = new Date().getFullYear();
+        let calCurrentMonth = new Date().getMonth();
+        let selectedCalDate = "";
+        let activeTab = 'attendance';
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('attendance-date').value = currentDate;
+            updateHeaderDateStr(currentDate);
+            ensureDateRecordExists(currentDate);
+            
+            if (GAS_API_URL && !GAS_API_URL.includes("ここにコピーしたGAS")) {
+                await fetchFromCloud();
+            } else {
+                renderApp();
+            }
+        });
+
+        function switchPage(page) {
+            const pageMain = document.getElementById('page-main');
+            const pageCal = document.getElementById('page-calendar');
+            const btnMain = document.getElementById('nav-btn-main');
+            const btnCal = document.getElementById('nav-btn-cal');
+            const btnMainSm = document.getElementById('nav-btn-main-sm');
+            const btnCalSm = document.getElementById('nav-btn-cal-sm');
+
+            if (page === 'main') {
+                pageMain.classList.remove('hidden');
+                pageCal.classList.add('hidden');
+                btnMain.className = "px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-2xs";
+                btnCal.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900";
+                btnMainSm.className = "bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-xl font-bold text-xs";
+                btnCalSm.className = "bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-xl font-bold text-xs";
+                renderApp();
+            } else {
+                pageMain.classList.add('hidden');
+                pageCal.classList.remove('hidden');
+                btnCal.className = "px-3 py-1.5 rounded-lg bg-white text-emerald-700 shadow-2xs";
+                btnMain.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900";
+                btnCalSm.className = "bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-xl font-bold text-xs";
+                btnMainSm.className = "bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-xl font-bold text-xs";
+                renderCalendar();
+            }
+        }
+
+        async function fetchFromCloud() {
+            if (!GAS_API_URL || GAS_API_URL.includes("ここにコピーしたGAS")) {
+                showToast("GASのURLが未設定です");
+                renderApp();
+                return;
+            }
+            showLoading(true);
+            try {
+                const res = await fetch(GAS_API_URL + '?action=getData');
+                const data = await res.json();
+                if (data && data.membersData) {
+                    membersData = data.membersData;
+                    rankOrder = data.rankOrder;
+                    attendanceRecords = data.attendanceRecords;
+                    autoSaveLocal();
+                    showToast("最新データを読み込みました");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("クラウド読込失敗（ローカル表示）");
+            } finally {
+                showLoading(false);
+                renderApp();
+                renderCalendar();
+            }
+        }
+
+        async function syncToCloud() {
+            if (!GAS_API_URL || GAS_API_URL.includes("ここにコピーしたGAS")) return;
+            showLoading(true);
+            try {
+                const payload = { membersData, rankOrder, attendanceRecords };
+                await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                showToast("クラウドに保存同期しました！");
+            } catch (e) {
+                console.error(e);
+                showToast("クラウド同期失敗（ローカル保存）");
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        }
+
+        function ensureDateRecordExists(dateStr) {
+            if (!attendanceRecords[dateStr]) {
+                attendanceRecords[dateStr] = { 
+                    attendance: {}, 
+                    earlyLeave: {}, 
+                    roomPrep: [], 
+                    fencePrep: [], 
+                    roomCleanup: [], 
+                    fenceCleanup: [], 
+                    dayTitle: "",
+                    notes: "" 
+                };
+            }
+            if (!attendanceRecords[dateStr].earlyLeave) attendanceRecords[dateStr].earlyLeave = {};
+            if (!attendanceRecords[dateStr].roomPrep) attendanceRecords[dateStr].roomPrep = [];
+            if (!attendanceRecords[dateStr].fencePrep) attendanceRecords[dateStr].fencePrep = [];
+            if (!attendanceRecords[dateStr].roomCleanup) attendanceRecords[dateStr].roomCleanup = [];
+            if (!attendanceRecords[dateStr].fenceCleanup) attendanceRecords[dateStr].fenceCleanup = [];
+            if (attendanceRecords[dateStr].dayTitle === undefined) attendanceRecords[dateStr].dayTitle = "";
+            if (attendanceRecords[dateStr].notes === undefined) attendanceRecords[dateStr].notes = "";
+        }
+
+        function updateHeaderDateStr(dateStr) {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+                const date = new Date(y, m - 1, d);
+                const days = ['日', '月', '火', '水', '木', '金', '土'];
+                document.getElementById('current-date-str').textContent = `${y}年${m}月${d}日 (${days[date.getDay()]})`;
+            } else {
+                document.getElementById('current-date-str').textContent = dateStr;
+            }
+        }
+
+        function onDateChange() {
+            currentDate = document.getElementById('attendance-date').value;
+            updateHeaderDateStr(currentDate);
+            ensureDateRecordExists(currentDate);
+            renderApp();
+        }
+
+        function autoSaveLocal() {
+            localStorage.setItem('tt_attendance_records', JSON.stringify(attendanceRecords));
+            localStorage.setItem('tt_members_data', JSON.stringify(membersData));
+            localStorage.setItem('tt_rank_order', JSON.stringify(rankOrder));
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2500);
+        }
+
+        function switchRankTab(rank) {
+            activeRankTab = rank;
+            renderApp();
+        }
+
+        function renderApp() {
+            ensureDateRecordExists(currentDate);
+            const todayRec = attendanceRecords[currentDate];
+
+            document.getElementById('day-title').value = todayRec.dayTitle || "";
+            document.getElementById('late-notes').value = todayRec.notes || "";
+
+            renderTaskSelector('room-prep-selector', membersData["中一"] || [], todayRec.roomPrep, 'roomPrep', 'bg-rose-500 text-white font-bold', 'hover:bg-rose-50');
+            renderTaskSelector('fence-prep-selector', CHU_NI_MEMBERS, todayRec.fencePrep, 'fencePrep', 'bg-blue-600 text-white font-bold', 'hover:bg-blue-50');
+            renderTaskSelector('room-cleanup-selector', membersData["中一"] || [], todayRec.roomCleanup, 'roomCleanup', 'bg-purple-600 text-white font-bold', 'hover:bg-purple-50');
+            renderTaskSelector('fence-cleanup-selector', CHU_NI_MEMBERS, todayRec.fenceCleanup, 'fenceCleanup', 'bg-teal-600 text-white font-bold', 'hover:bg-teal-50');
+
+            // ランク切り替えタブの生成
+            const rankTabsBar = document.getElementById('rank-tabs-bar');
+            let tabsHtml = `
+                <button onclick="switchRankTab('ALL')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${activeRankTab === 'ALL' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+                    全員表示
+                </button>
+            `;
+            rankOrder.forEach(r => {
+                const names = membersData[r] || [];
+                let pCount = 0;
+                names.forEach(n => { if (todayRec.attendance[n]) pCount++; });
+                tabsHtml += `
+                    <button onclick="switchRankTab('${r}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${activeRankTab === r ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+                        <span>${r}</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] ${activeRankTab === r ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'}">${pCount}/${names.length}</span>
+                    </button>
+                `;
+            });
+            rankTabsBar.innerHTML = tabsHtml;
+
+            // メイン部員出欠カード描画
+            const mainContainer = document.getElementById('ranks-container');
+            const headerCounters = document.getElementById('header-counters');
+            mainContainer.innerHTML = '';
+
+            let totalPresent = 0, totalMembers = 0;
+            let countersHtml = '';
+
+            const ranksToRender = activeRankTab === 'ALL' ? rankOrder : [activeRankTab];
+
+            rankOrder.forEach(rank => {
+                const names = membersData[rank] || [];
+                totalMembers += names.length;
+                let rankPresent = 0;
+                names.forEach(n => { if (todayRec.attendance[n]) rankPresent++; });
+                totalPresent += rankPresent;
+
+                countersHtml += `
+                    <span class="bg-white border border-slate-200 px-2 py-0.5 rounded-lg text-xs font-bold text-slate-700">
+                        ${rank}: <span class="text-emerald-600">${rankPresent}</span>/${names.length}
+                    </span>
+                `;
+            });
+
+            ranksToRender.forEach(rank => {
+                const names = membersData[rank] || [];
+                let rankPresent = 0;
+                names.forEach(n => { if (todayRec.attendance[n]) rankPresent++; });
+
+                const rankCard = document.createElement('div');
+                rankCard.className = "bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden";
+                
+                let cardInner = `
+                    <div class="px-4 py-3 bg-slate-100/70 border-b border-slate-200 flex justify-between items-center">
+                        <span class="font-bold text-sm text-slate-800">${rank} ランク (${names.length}名)</span>
+                        <span class="text-xs font-bold text-slate-600">出席: <span class="text-emerald-600 font-black">${rankPresent}</span> / ${names.length}</span>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                `;
+
+                names.forEach(name => {
+                    const isPresent = !!todayRec.attendance[name];
+                    const earlyLeaveTime = todayRec.earlyLeave[name] || "";
+
+                    cardInner += `
+                        <div class="p-2.5 rounded-xl border transition flex items-center justify-between gap-2 ${isPresent ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}">
+                            <button onclick="toggleAttendance('${name}')" class="flex-1 text-left active:scale-95 transition">
+                                <div class="text-xs sm:text-sm font-bold truncate ${isPresent ? 'text-emerald-900' : 'text-slate-700'}">${name}</div>
+                                <div class="text-[10px] ${isPresent ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${isPresent ? '✓ 出席' : '未出席'}</div>
+                            </button>
+
+                            <button onclick="toggleEarlyLeave('${name}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${earlyLeaveTime ? 'bg-amber-500 text-white shadow-xs' : 'bg-white hover:bg-slate-100 border border-slate-300 text-slate-600'}">
+                                <i class="fa-solid fa-person-walking-arrow-right text-[11px]"></i>
+                                <span>${earlyLeaveTime ? earlyLeaveTime : '早退'}</span>
+                            </button>
+                        </div>
+                    `;
+                });
+                cardInner += `</div>`;
+                rankCard.innerHTML = cardInner;
+                mainContainer.appendChild(rankCard);
+            });
+
+            headerCounters.innerHTML = `
+                <div class="flex items-center gap-1.5 px-3 py-0.5 bg-white rounded-xl border border-slate-200 text-xs font-bold">
+                    <span class="text-slate-400">全体:</span>
+                    <span class="text-base text-emerald-600 font-black">${totalPresent}</span>
+                    <span class="text-slate-400">/ ${totalMembers}名</span>
+                </div>
+                ${countersHtml}
+            `;
+        }
+
+        function renderTaskSelector(containerId, memberList, selectedList, taskType, activeClass, hoverClass) {
+            const container = document.getElementById(containerId);
+            let html = '';
+            memberList.forEach(name => {
+                const checked = selectedList.includes(name);
+                html += `
+                    <label class="flex items-center gap-1.5 p-1.5 rounded-lg text-xs cursor-pointer ${checked ? activeClass : hoverClass + ' text-slate-700'} transition">
+                        <input type="checkbox" onchange="toggleTask('${taskType}', '${name}')" ${checked ? 'checked' : ''} class="hidden">
+                        <i class="fa-solid ${checked ? 'fa-square-check' : 'fa-square'} text-sm"></i>
+                        <span class="truncate">${name}</span>
+                    </label>
+                `;
+            });
+            container.innerHTML = html || '<div class="text-center text-xs text-slate-400 py-2">該当部員なし</div>';
+        }
+
+        function toggleAttendance(name) {
+            ensureDateRecordExists(currentDate);
+            const att = attendanceRecords[currentDate].attendance;
+            att[name] = !att[name];
+            renderApp();
+            autoSaveLocal();
+        }
+
+        function toggleEarlyLeave(name) {
+            ensureDateRecordExists(currentDate);
+            const el = attendanceRecords[currentDate].earlyLeave;
+            if (el[name]) {
+                const change = confirm(`「${name}」さんの早退（${el[name]}）を取り消しますか？\n（[キャンセル]を押すと時刻の変更ができます）`);
+                if (change) {
+                    delete el[name];
+                } else {
+                    const newTime = prompt("早退（帰宅）時刻を入力してください", getCurrentTimeString());
+                    if (newTime) el[name] = newTime;
+                }
+            } else {
+                const defaultTime = getCurrentTimeString();
+                const setTime = prompt(`「${name}」さんの早退時刻を入力してください`, defaultTime);
+                if (setTime) {
+                    el[name] = setTime;
+                    attendanceRecords[currentDate].attendance[name] = true;
+                }
+            }
+            renderApp();
+            autoSaveLocal();
+        }
+
+        function toggleTask(taskType, name) {
+            ensureDateRecordExists(currentDate);
+            const list = attendanceRecords[currentDate][taskType];
+            const idx = list.indexOf(name);
+            if (idx > -1) list.splice(idx, 1);
+            else list.push(name);
+            renderApp();
+            autoSaveLocal();
+        }
+
+        function onDayTitleInput() {
+            ensureDateRecordExists(currentDate);
+            attendanceRecords[currentDate].dayTitle = document.getElementById('day-title').value;
+            autoSaveLocal();
+        }
+
+        function onNotesInput() {
+            ensureDateRecordExists(currentDate);
+            attendanceRecords[currentDate].notes = document.getElementById('late-notes').value;
+            autoSaveLocal();
+        }
+
+        function resetTodayAttendance() {
+            if (confirm(`${currentDate} の選択内容をリセットしますか？`)) {
+                attendanceRecords[currentDate] = { attendance: {}, earlyLeave: {}, roomPrep: [], fencePrep: [], roomCleanup: [], fenceCleanup: [], dayTitle: "", notes: "" };
+                renderApp();
+                autoSaveLocal();
+                showToast('本日分をリセットしました');
+            }
+        }
+
+        async function saveTodayAttendance() {
+            autoSaveLocal();
+            await syncToCloud();
+        }
+
+        // --- 📅 カレンダー機能 ---
+        function changeMonth(delta) {
+            calCurrentMonth += delta;
+            if (calCurrentMonth < 0) {
+                calCurrentMonth = 11;
+                calCurrentYear--;
+            } else if (calCurrentMonth > 11) {
+                calCurrentMonth = 0;
+                calCurrentYear++;
+            }
+            renderCalendar();
+        }
+
+        function goToCurrentMonth() {
+            calCurrentYear = new Date().getFullYear();
+            calCurrentMonth = new Date().getMonth();
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const monthYearHeader = document.getElementById('calendar-month-year');
+            const grid = document.getElementById('calendar-days-grid');
+            
+            monthYearHeader.textContent = `${calCurrentYear}年 ${calCurrentMonth + 1}月`;
+            grid.innerHTML = '';
+
+            const firstDay = new Date(calCurrentYear, calCurrentMonth, 1).getDay();
+            const daysInMonth = new Date(calCurrentYear, calCurrentMonth + 1, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = "min-h-[90px] sm:min-h-[110px] bg-slate-50/50 rounded-2xl border border-slate-100 opacity-30";
+                grid.appendChild(emptyCell);
+            }
+
+            const todayStr = getTodayString();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${calCurrentYear}-${String(calCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const rec = attendanceRecords[dateStr];
+                const isToday = dateStr === todayStr;
+
+                let presentCount = 0;
+                let dayTitle = "";
+                let hasData = false;
+
+                if (rec) {
+                    dayTitle = rec.dayTitle || "";
+                    if (rec.attendance) {
+                        presentCount = Object.values(rec.attendance).filter(Boolean).length;
+                    }
+                    if (dayTitle || presentCount > 0 || rec.notes || (rec.roomPrep && rec.roomPrep.length > 0)) {
+                        hasData = true;
+                    }
+                }
+
+                const cell = document.createElement('div');
+                cell.onclick = () => openCalModal(dateStr);
+                cell.className = `min-h-[90px] sm:min-h-[110px] p-2 rounded-2xl border transition flex flex-col justify-between cursor-pointer hover:shadow-md active:scale-98 ${isToday ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-300/50' : 'bg-white border-slate-200 hover:border-emerald-300'}`;
+
+                let badgesHtml = '';
+                if (dayTitle) {
+                    badgesHtml += `<div class="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-md truncate mb-1 border border-amber-200">${dayTitle}</div>`;
+                }
+                if (presentCount > 0) {
+                    badgesHtml += `<div class="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md truncate">${presentCount}名 出席</div>`;
+                } else if (hasData && !dayTitle) {
+                    badgesHtml += `<div class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded-md">記録あり</div>`;
+                }
+
+                cell.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs sm:text-sm font-black ${isToday ? 'text-emerald-700 bg-emerald-200/80 px-1.5 py-0.5 rounded-lg' : 'text-slate-800'}">${day}</span>
+                        ${hasData ? '<i class="fa-solid fa-circle text-[6px] text-emerald-500"></i>' : ''}
+                    </div>
+                    <div class="space-y-0.5 mt-1">
+                        ${badgesHtml}
+                    </div>
+                `;
+                grid.appendChild(cell);
+            }
+        }
+
+        function openCalModal(dateStr) {
+            selectedCalDate = dateStr;
+            ensureDateRecordExists(dateStr);
+            const rec = attendanceRecords[dateStr];
+
+            const parts = dateStr.split('-');
+            const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+            const date = new Date(y, m - 1, d);
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+
+            document.getElementById('cal-modal-date').textContent = `${y}年${m}月${d}日 (${days[date.getDay()]})`;
+            document.getElementById('cal-modal-title').value = rec.dayTitle || "";
+
+            let presentCount = 0;
+            if (rec.attendance) presentCount = Object.values(rec.attendance).filter(Boolean).length;
+
+            const roomP = (rec.roomPrep || []).length;
+            const fenceP = (rec.fencePrep || []).length;
+
+            document.getElementById('cal-modal-status-info').innerHTML = `
+                <div>• 出席人数: <b class="text-emerald-600">${presentCount}名</b></div>
+                <div>• 準備担当: 部室 ${roomP}名 / フェンス ${fenceP}名</div>
+                <div>• 遅刻・備考: ${rec.notes ? rec.notes : 'なし'}</div>
+            `;
+
+            document.getElementById('cal-detail-modal').classList.remove('hidden');
+        }
+
+        function closeCalModal() {
+            document.getElementById('cal-detail-modal').classList.add('hidden');
+        }
+
+        async function saveCalModal() {
+            ensureDateRecordExists(selectedCalDate);
+            attendanceRecords[selectedCalDate].dayTitle = document.getElementById('cal-modal-title').value;
+            autoSaveLocal();
+            await syncToCloud();
+            closeCalModal();
+            renderCalendar();
+            if (currentDate === selectedCalDate) renderApp();
+        }
+
+        async function saveCalModalAndOpen() {
+            await saveCalModal();
+            currentDate = selectedCalDate;
+            document.getElementById('attendance-date').value = currentDate;
+            updateHeaderDateStr(currentDate);
+            switchPage('main');
+        }
+
+        async function deleteCalModalRecord() {
+            if (confirm(`${selectedCalDate} の記録を削除（部活なし）しますか？`)) {
+                delete attendanceRecords[selectedCalDate];
+                autoSaveLocal();
+                await syncToCloud();
+                closeCalModal();
+                renderCalendar();
+                if (currentDate === selectedCalDate) {
+                    ensureDateRecordExists(currentDate);
+                    renderApp();
+                }
+                showToast("記録を削除しました");
+            }
+        }
+
+        // 記録が存在する日付のみを取得するフィルタ関数
+        function getSavedDates() {
+            return Object.keys(attendanceRecords).filter(d => {
+                const rec = attendanceRecords[d];
+                if (!rec) return false;
+                const hasAtt = rec.attendance && Object.values(rec.attendance).some(Boolean);
+                const hasTask = (rec.roomPrep && rec.roomPrep.length > 0) || (rec.fencePrep && rec.fencePrep.length > 0) || (rec.roomCleanup && rec.roomCleanup.length > 0) || (rec.fenceCleanup && rec.fenceCleanup.length > 0);
+                const hasTitle = !!rec.dayTitle;
+                const hasNotes = !!rec.notes;
+                return hasAtt || hasTask || hasTitle || hasNotes;
+            }).sort();
+        }
+
+        // --- 履歴モーダル ---
+        function openHistoryModal() {
+            switchHistoryTab(activeTab);
+            document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('history-modal').classList.add('hidden');
+        }
+
+        function switchHistoryTab(tab) {
+            activeTab = tab;
+            const btnAtt = document.getElementById('tab-btn-attendance');
+            const btnEl = document.getElementById('tab-btn-earlyleave');
+            const btnTask = document.getElementById('tab-btn-task');
+            
+            const contentAtt = document.getElementById('tab-content-attendance');
+            const contentEl = document.getElementById('tab-content-earlyleave');
+            const contentTask = document.getElementById('tab-content-task');
+
+            [btnAtt, btnEl, btnTask].forEach(b => b.className = "px-2.5 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-900 font-bold");
+            [contentAtt, contentEl, contentTask].forEach(c => c.classList.add('hidden'));
+
+            if (tab === 'attendance') {
+                btnAtt.className = "px-2.5 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-2xs font-bold";
+                contentAtt.classList.remove('hidden');
+                renderAttendanceMatrix();
+            } else if (tab === 'earlyleave') {
+                btnEl.className = "px-2.5 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-2xs font-bold";
+                contentEl.classList.remove('hidden');
+                renderEarlyLeaveMatrix();
+            } else {
+                btnTask.className = "px-2.5 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-2xs font-bold";
+                contentTask.classList.remove('hidden');
+                renderTaskMatrix();
+            }
+        }
+
+        function renderAttendanceMatrix() {
+            const table = document.getElementById('history-matrix-table');
+            let dates = getSavedDates();
+            if (dates.length === 0) dates = [currentDate];
+
+            let allMembers = [];
+            rankOrder.forEach(r => (membersData[r] || []).forEach(n => allMembers.push({ name: n, rank: r })));
+
+            let thead = `<tr class="bg-slate-100 border-b"><th class="p-2.5 border-r">部員名</th><th class="p-2.5 border-r text-center">ランク</th>`;
+            dates.forEach(d => {
+                const dateWithDay = formatDateWithDay(d);
+                const title = attendanceRecords[d]?.dayTitle ? `<br><span class="text-[10px] font-normal text-slate-500">${attendanceRecords[d].dayTitle}</span>` : '';
+                thead += `<th class="p-2.5 border-r text-center min-w-[95px]">${dateWithDay}${title}</th>`;
+            });
+            thead += `</tr>`;
+
+            let tbody = '';
+            allMembers.forEach(m => {
+                tbody += `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-bold border-r">${m.name}</td><td class="p-2.5 border-r text-center text-xs text-slate-500">${m.rank}</td>`;
+                dates.forEach(d => {
+                    const isP = attendanceRecords[d]?.attendance?.[m.name];
+                    tbody += `<td class="p-2.5 border-r text-center ${isP ? 'bg-emerald-50 text-emerald-600 font-bold' : 'text-slate-300'}">${isP ? '✓ 出席' : '-'}</td>`;
+                });
+                tbody += `</tr>`;
+            });
+
+            table.innerHTML = `<thead>${thead}</thead><tbody>${tbody}</tbody>`;
+        }
+
+        function renderEarlyLeaveMatrix() {
+            const table = document.getElementById('earlyleave-matrix-table');
+            let dates = getSavedDates();
+            if (dates.length === 0) dates = [currentDate];
+
+            let allMembers = [];
+            rankOrder.forEach(r => (membersData[r] || []).forEach(n => allMembers.push({ name: n, rank: r })));
+
+            let thead = `<tr class="bg-slate-100 border-b"><th class="p-2.5 border-r">部員名</th><th class="p-2.5 border-r text-center">ランク</th>`;
+            dates.forEach(d => {
+                const dateWithDay = formatDateWithDay(d);
+                const title = attendanceRecords[d]?.dayTitle ? `<br><span class="text-[10px] font-normal text-slate-500">${attendanceRecords[d].dayTitle}</span>` : '';
+                thead += `<th class="p-2.5 border-r text-center min-w-[95px]">${dateWithDay}${title}</th>`;
+            });
+            thead += `</tr>`;
+
+            let tbody = '';
+            allMembers.forEach(m => {
+                tbody += `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-bold border-r">${m.name}</td><td class="p-2.5 border-r text-center text-xs text-slate-500">${m.rank}</td>`;
+                dates.forEach(d => {
+                    const time = attendanceRecords[d]?.earlyLeave?.[m.name];
+                    tbody += `<td class="p-2.5 border-r text-center ${time ? 'bg-amber-50 text-amber-700 font-bold' : 'text-slate-300'}">${time ? time : '-'}</td>`;
+                });
+                tbody += `</tr>`;
+            });
+
+            table.innerHTML = `<thead>${thead}</thead><tbody>${tbody}</tbody>`;
+        }
+
+        function renderTaskMatrix() {
+            const table = document.getElementById('task-matrix-table');
+            let dates = getSavedDates();
+            if (dates.length === 0) dates = [currentDate];
+
+            let thead = `
+                <tr class="bg-slate-100 border-b text-xs">
+                    <th class="p-2.5 border-r min-w-[100px]">日付</th>
+                    <th class="p-2.5 border-r min-w-[100px]">本日の行事</th>
+                    <th class="p-2.5 border-r bg-rose-50 text-rose-900">部室準備 (中一)</th>
+                    <th class="p-2.5 border-r bg-blue-50 text-blue-900">フェンス準備 (中二)</th>
+                    <th class="p-2.5 border-r bg-purple-50 text-purple-900">部室片付け (中一)</th>
+                    <th class="p-2.5 border-r bg-teal-50 text-teal-900">フェンス片付け (中二)</th>
+                    <th class="p-2.5 min-w-[140px]">遅刻・備考メモ</th>
+                </tr>
+            `;
+
+            let tbody = '';
+            dates.forEach(d => {
+                const rec = attendanceRecords[d] || {};
+                const dateWithDay = formatDateWithDay(d);
+                const dayTitle = rec.dayTitle || '<span class="text-slate-300">-</span>';
+                const roomP = (rec.roomPrep || []).join(', ') || '<span class="text-slate-300">-</span>';
+                const fenceP = (rec.fencePrep || []).join(', ') || '<span class="text-slate-300">-</span>';
+                const roomC = (rec.roomCleanup || []).join(', ') || '<span class="text-slate-300">-</span>';
+                const fenceC = (rec.fenceCleanup || []).join(', ') || '<span class="text-slate-300">-</span>';
+                const notes = rec.notes || '<span class="text-slate-300">-</span>';
+
+                tbody += `
+                    <tr class="border-b hover:bg-slate-50 text-xs">
+                        <td class="p-2.5 font-bold border-r text-slate-800">${dateWithDay}</td>
+                        <td class="p-2.5 border-r text-slate-700 font-medium">${dayTitle}</td>
+                        <td class="p-2.5 border-r text-rose-700 font-medium">${roomP}</td>
+                        <td class="p-2.5 border-r text-blue-700 font-medium">${fenceP}</td>
+                        <td class="p-2.5 border-r text-purple-700 font-medium">${roomC}</td>
+                        <td class="p-2.5 border-r text-teal-700 font-medium">${fenceC}</td>
+                        <td class="p-2.5 text-slate-600 whitespace-pre-wrap">${notes}</td>
+                    </tr>
+                `;
+            });
+
+            table.innerHTML = `<thead>${thead}</thead><tbody>${tbody}</tbody>`;
+        }
+
+        function exportToCSV() {
+            let dates = getSavedDates();
+            if (dates.length === 0) return alert('データがありません');
+
+            let csv = '\uFEFF"日付","本日の行事","部室準備","フェンス準備","部室片付け","フェンス片付け","遅刻・備考メモ"\n';
+            dates.forEach(d => {
+                const rec = attendanceRecords[d] || {};
+                const dateWithDay = formatDateWithDay(d);
+                csv += `"${dateWithDay}","${(rec.dayTitle||'').replace(/"/g, '""')}","${(rec.roomPrep||[]).join(';')}","${(rec.fencePrep||[]).join(';')}","${(rec.roomCleanup||[]).join(';')}","${(rec.fenceCleanup||[]).join(';')}","${(rec.notes||'').replace(/"/g, '""')}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `卓球部_活動＆業務記録_${getTodayString()}.csv`;
+            a.click();
+        }
+
+        // --- 部員・ランク管理 ---
+        function openManageModal() {
+            const rankSelect = document.getElementById('new-member-rank');
+            rankSelect.innerHTML = rankOrder.map(r => `<option value="${r}">${r}ランク</option>`).join('');
+            renderManageTable();
+            document.getElementById('manage-modal').classList.remove('hidden');
+        }
+
+        function closeManageModal() {
+            document.getElementById('manage-modal').classList.add('hidden');
+            renderApp();
+        }
+
+        function renderManageTable() {
+            const tbody = document.getElementById('manage-member-table-body');
+            tbody.innerHTML = '';
+            rankOrder.forEach(r => {
+                (membersData[r] || []).forEach(name => {
+                    const tr = document.createElement('tr');
+                    const opts = rankOrder.map(rk => `<option value="${rk}" ${rk === r ? 'selected' : ''}>${rk}</option>`).join('');
+                    tr.innerHTML = `
+                        <td class="p-2 font-bold">${name}</td>
+                        <td class="p-2"><select onchange="changeRank('${r}', '${name}', this.value)" class="bg-slate-100 rounded px-2 py-1">${opts}</select></td>
+                        <td class="p-2 text-right"><button onclick="removeMember('${r}', '${name}')" class="text-rose-600 hover:underline">削除</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        function changeRank(oldR, name, newR) {
+            if (oldR === newR) return;
+            membersData[oldR] = membersData[oldR].filter(n => n !== name);
+            if (!membersData[newR]) membersData[newR] = [];
+            membersData[newR].push(name);
+            autoSaveLocal();
+            renderManageTable();
+        }
+
+        function removeMember(r, name) {
+            if (confirm(`${name} さんを削除しますか？`)) {
+                membersData[r] = membersData[r].filter(n => n !== name);
+                autoSaveLocal();
+                renderManageTable();
+            }
+        }
+
+        function addNewMember() {
+            const name = document.getElementById('new-member-name').value.trim();
+            const rank = document.getElementById('new-member-rank').value;
+            if (!name) return alert('氏名を入力してください');
+            membersData[rank].push(name);
+            document.getElementById('new-member-name').value = '';
+            autoSaveLocal();
+            renderManageTable();
+        }
+
+        function addNewRank() {
+            const name = document.getElementById('new-rank-name').value.trim();
+            if (!name || rankOrder.includes(name)) return alert('正しい名称を入力してください');
+            rankOrder.push(name);
+            membersData[name] = [];
+            document.getElementById('new-rank-name').value = '';
+            autoSaveLocal();
+            openManageModal();
+        }
+
+        function resetToDefaultMembers() {
+            if (confirm('部員データをデフォルトデータに戻しますか？')) {
+                membersData = JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
+                rankOrder = ["A", "B", "C", "D", "E", "中一"];
+                autoSaveLocal();
+                openManageModal();
+            }
+        }
+    </script>
+</body>
+</html>
